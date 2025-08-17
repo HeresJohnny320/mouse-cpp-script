@@ -1,5 +1,7 @@
 // --- CONFIGURATION ---
 // Set your target mouse VID and PID here (as hex, uppercase, no 0x prefix)
+#define UNICODE
+#define _UNICODE
 #define TARGET_VID L"1D57"
 #define TARGET_PID L"AD05"
 // --- END CONFIGURATION ---
@@ -135,4 +137,3 @@ int main() {
     }
     return 0;
 }
-// TODO fix some of the issues with not detecting some mouse
