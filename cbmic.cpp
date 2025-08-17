@@ -12,13 +12,18 @@
 #include <vector>
 #include <map>
 #include <cctype>
+#include <thread>
+#include <chrono>
 
 // Remapping: button flag to virtual-key code
 std::map<USHORT, WORD> remap;
 // Track which keys are currently pressed down
 std::map<WORD, bool> key_states;
+// Track which keys should be continuously sent
+std::map<WORD, bool> continuous_keys;
 std::wstring selected_mouse_id;
 bool setup_done = false;
+bool running = true;
 
 // Helper to build the device ID string
 std::wstring get_target_id() {
@@ -50,21 +55,42 @@ WORD ask_key(const std::wstring& btn_name) {
     return std::toupper(input[0]);
 }
 
+void continuous_key_sender() {
+    while (running) {
+        for (auto& kv : continuous_keys) {
+            if (kv.second) {  // If this key should be continuously sent
+                INPUT input = {};
+                input.type = INPUT_KEYBOARD;
+                input.ki.wVk = kv.first;
+                input.ki.wScan = MapVirtualKey(kv.first, MAPVK_VK_TO_VSC);
+                SendInput(1, &input, sizeof(INPUT));
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Send every 50ms
+    }
+}
+
 void send_key_down(WORD vk) {
-    if (!key_states[vk]) {  // Only send if not already pressed
+    if (!key_states[vk]) {
+        // Send initial key down
         INPUT input = {};
         input.type = INPUT_KEYBOARD;
         input.ki.wVk = vk;
+        input.ki.wScan = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
         SendInput(1, &input, sizeof(INPUT));
         key_states[vk] = true;
+        continuous_keys[vk] = true;  // Start continuous sending
     }
 }
 
 void send_key_up(WORD vk) {
-    if (key_states[vk]) {  // Only send if currently pressed
+    if (key_states[vk]) {
+        continuous_keys[vk] = false;  // Stop continuous sending
+        // Send key up
         INPUT input = {};
         input.type = INPUT_KEYBOARD;
         input.ki.wVk = vk;
+        input.ki.wScan = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
         input.ki.dwFlags = KEYEVENTF_KEYUP;
         SendInput(1, &input, sizeof(INPUT));
         key_states[vk] = false;
@@ -75,19 +101,26 @@ void send_key(WORD vk) {
     INPUT input[2] = {};
     input[0].type = INPUT_KEYBOARD;
     input[0].ki.wVk = vk;
+    input[0].ki.wScan = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
     input[1].type = INPUT_KEYBOARD;
     input[1].ki.wVk = vk;
+    input[1].ki.wScan = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
     input[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(2, input, sizeof(INPUT));
 }
 
 void cleanup_keys() {
+    // Stop continuous sending
+    for (auto& kv : continuous_keys) {
+        kv.second = false;
+    }
     // Release all currently held keys
     for (auto& kv : key_states) {
         if (kv.second) {
             send_key_up(kv.first);
         }
     }
+    running = false;
 }
 
 void print_remap_config() {
@@ -185,6 +218,10 @@ BOOL WINAPI ConsoleHandler(DWORD dwType) {
 int main() {
     // Set up console handler for cleanup
     SetConsoleCtrlHandler(ConsoleHandler, TRUE);
+    
+    // Start the continuous key sender thread
+    std::thread key_thread(continuous_key_sender);
+    key_thread.detach();
     
     // Register window class
     WNDCLASS wc = {0};
