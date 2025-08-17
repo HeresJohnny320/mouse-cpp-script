@@ -15,6 +15,8 @@
 
 // Remapping: button flag to virtual-key code
 std::map<USHORT, WORD> remap;
+// Track which keys are currently pressed down
+std::map<WORD, bool> key_states;
 std::wstring selected_mouse_id;
 bool setup_done = false;
 
@@ -48,6 +50,27 @@ WORD ask_key(const std::wstring& btn_name) {
     return std::toupper(input[0]);
 }
 
+void send_key_down(WORD vk) {
+    if (!key_states[vk]) {  // Only send if not already pressed
+        INPUT input = {};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = vk;
+        SendInput(1, &input, sizeof(INPUT));
+        key_states[vk] = true;
+    }
+}
+
+void send_key_up(WORD vk) {
+    if (key_states[vk]) {  // Only send if currently pressed
+        INPUT input = {};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = vk;
+        input.ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(1, &input, sizeof(INPUT));
+        key_states[vk] = false;
+    }
+}
+
 void send_key(WORD vk) {
     INPUT input[2] = {};
     input[0].type = INPUT_KEYBOARD;
@@ -56,6 +79,15 @@ void send_key(WORD vk) {
     input[1].ki.wVk = vk;
     input[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(2, input, sizeof(INPUT));
+}
+
+void cleanup_keys() {
+    // Release all currently held keys
+    for (auto& kv : key_states) {
+        if (kv.second) {
+            send_key_up(kv.first);
+        }
+    }
 }
 
 void print_remap_config() {
@@ -88,13 +120,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 remap[RI_MOUSE_MIDDLE_BUTTON_DOWN] = ask_key(L"Middle");
                 remap[RI_MOUSE_RIGHT_BUTTON_DOWN] = ask_key(L"Right");
                 print_remap_config();
-                std::wcout << L"Remapping started! Click a button on your mouse to see what it is remapped to. Press Ctrl+C to exit.\n" << std::endl;
+                std::wcout << L"Hold remapping started! Hold down a button on your mouse to hold the corresponding key. Press Ctrl+C to exit.\n" << std::endl;
                 setup_done = true;
                 return 0;
             }
             if (devName != selected_mouse_id) {
                 return 0; // Ignore non-selected mice
             }
+            
+            // Handle button down events
             for (const auto& kv : remap) {
                 if (raw->data.mouse.usButtonFlags & kv.first) {
                     std::wcout << L"Button pressed: ";
@@ -102,8 +136,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     else if (kv.first == RI_MOUSE_RIGHT_BUTTON_DOWN) std::wcout << L"Right";
                     else if (kv.first == RI_MOUSE_MIDDLE_BUTTON_DOWN) std::wcout << L"Middle";
                     else std::wcout << L"Other";
-                    std::wcout << L" -> Remapped to: " << (wchar_t)kv.second << std::endl;
-                    send_key(kv.second);
+                    std::wcout << L" -> Holding key: " << (wchar_t)kv.second << std::endl;
+                    send_key_down(kv.second);
+                }
+            }
+            
+            // Handle button up events
+            if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP) {
+                auto it = remap.find(RI_MOUSE_LEFT_BUTTON_DOWN);
+                if (it != remap.end()) {
+                    std::wcout << L"Button released: Left -> Releasing key: " << (wchar_t)it->second << std::endl;
+                    send_key_up(it->second);
+                }
+            }
+            if (raw->data.mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_UP) {
+                auto it = remap.find(RI_MOUSE_RIGHT_BUTTON_DOWN);
+                if (it != remap.end()) {
+                    std::wcout << L"Button released: Right -> Releasing key: " << (wchar_t)it->second << std::endl;
+                    send_key_up(it->second);
+                }
+            }
+            if (raw->data.mouse.usButtonFlags & RI_MOUSE_MIDDLE_BUTTON_UP) {
+                auto it = remap.find(RI_MOUSE_MIDDLE_BUTTON_DOWN);
+                if (it != remap.end()) {
+                    std::wcout << L"Button released: Middle -> Releasing key: " << (wchar_t)it->second << std::endl;
+                    send_key_up(it->second);
                 }
             }
         }
@@ -111,7 +168,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
+BOOL WINAPI ConsoleHandler(DWORD dwType) {
+    switch (dwType) {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+    case CTRL_CLOSE_EVENT:
+        cleanup_keys();
+        exit(0);
+        break;
+    default:
+        break;
+    }
+    return TRUE;
+}
+
 int main() {
+    // Set up console handler for cleanup
+    SetConsoleCtrlHandler(ConsoleHandler, TRUE);
+    
     // Register window class
     WNDCLASS wc = {0};
     wc.lpfnWndProc = WndProc;
@@ -135,6 +209,8 @@ int main() {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    
+    cleanup_keys();
     return 0;
 }
 // TODO: fix for better detection 
