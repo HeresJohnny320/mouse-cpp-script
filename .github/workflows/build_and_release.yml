@@ -20,20 +20,12 @@ jobs:
         run: cl /EHsc cbmic.cpp /Fe:cbmic.exe /link user32.lib
 
       - name: Create or Update Release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ github.ref_name }}
+          tag: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          update_existing: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload exe to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: cbmic.exe
+          artifacts: cbmic.exe
+          allowUpdates: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 #git tag v1.0 && git push origin v1.0
