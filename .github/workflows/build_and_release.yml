@@ -2,8 +2,8 @@ name: Build and Release
 # im new to workflows and actions so dont make fun of this :) im hoping i got it working now 
 on:
   push:
-    branches:
-      - main  # or your default branch
+    tags:
+      - '*'  # Run on any tag push
 
 jobs:
   build:
@@ -19,20 +19,11 @@ jobs:
       - name: Build with MSVC
         run: cl /EHsc cbmic.cpp /Fe:cbmic.exe /link user32.lib
 
-      - name: Create Tag
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git tag auto-${{ github.sha }}
-          git push origin auto-${{ github.sha }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: auto-${{ github.sha }}
-          name: Release auto-${{ github.sha }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
         env:
