@@ -6,7 +6,7 @@ Using this setup, I made the **middle mouse button act as "X"** for in-game cb r
 
 You’re welcome to use this code however you want—modify it, improve it, or just take ideas from it. If you have suggestions to make it better, feel free to update it!
 
----
+----
 
 ## Notes
 - This is a personal project, so it’s pretty DIY.  
