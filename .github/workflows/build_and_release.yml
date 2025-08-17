@@ -1,5 +1,5 @@
 name: Build and Release
-
+# im new to workflows and actions so dont make fun of this :) im hoping i got it working now 
 on:
   push:
     tags:
