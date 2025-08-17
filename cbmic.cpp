@@ -135,3 +135,4 @@ int main() {
     }
     return 0;
 }
+// TODO fix some of the issues with not detecting some mouse
